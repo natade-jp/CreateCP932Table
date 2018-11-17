@@ -46,7 +46,7 @@
 	if(code < 0x100) {
 		if(low <= 0x20) {
 			_stat = 1
-			return strf("0x%04x\t%s\t0x%08x\t%s\t%d\t%d\t%d", code, "", code, "", 0, 0, 0)
+			return strf("0x%04x\t%s\t0x%08x\t%s\t%d\t%d", code, "", code, "", 0, 0)
 		}
 	}
 
@@ -94,32 +94,29 @@
 	if(isUsedDefaultChar) {
 		cp932 = defaultchar
 	}
-	
+
 	numError = 0
-	if(defaultchar == cp932) {
+
+	if((defaultchar == cp932) && (peek(defaultchar, 0) != code)) {
+		// 変換ミス
 		numError = 1
-	}
-
-	// 元々の文字コードが変換ミスと同じ場合
-	if(peek(defaultchar, 0) == code) {
-		isUsedDefaultChar = 0
-		numError = 0
-	}
-
-	// 変換ミス判定
-	// sjisで「・」0x8145、 utf-8で「・」0x30fb
-	// 変換ミスする場合も、「・」0x30fb になる。
-	if((code != 0x8145) && (codepoint == 0x30fb)) {
+	} else : if((code != 0x8145) && (codepoint == 0x30fb)) {
+		// 変換ミス判定
+		// sjisで「・」0x8145、 utf-8で「・」0x30fb
+		// 変換ミスする場合も、「・」0x30fb になる。
 		numError = 2
+	} else : if(lpeek(character, 0) != lpeek(cp932, 0)) {
+		// 文字列比較では等しいが、文字コードが等しくない場合
+		// IBM拡張文字 と NEC選定IBM拡張文字 関係
+		numError = 3
 	}
 
 	_stat = 1
-	output = strf("0x%04x\t%s\t0x%08x\t%s\t%d\t%d\t%d", code, character, codepoint, cp932, isUsedDefaultChar, numError, isSurrogatePair)
+	output = strf("0x%04x\t%s\t0x%08x\t%s\t%d\t%d", code, character, codepoint, cp932, numError, isSurrogatePair)
 
 	return output
 
 #global
-
 
 sdim output, 10 * 1024 * 1024
 code = 0
