@@ -1,0 +1,144 @@
+/**
+ * cp932とUnicode変換用テーブルの作成
+ * 
+ * AUTHOR:
+ *  natade (http://twitter.com/natadea)
+ * 
+ * LICENSE:
+ *  The zlib/libpng License https://opensource.org/licenses/Zlib
+ */
+
+
+#packopt name "CreateCP932Table"
+#packopt runtime "hsp3cl.hrt"
+
+#module
+
+#define CP_ACP 0
+#define CP_UTF8 65001
+#define MB_PRECOMPOSED 1
+
+#uselib "Kernel32.dll"
+
+// https://msdn.microsoft.com/ja-jp/library/cc448053.aspx
+#func MultiByteToWideChar "MultiByteToWideChar" int, int, var, int, int, int
+
+// https://msdn.microsoft.com/ja-jp/library/cc448089.aspx
+#func WideCharToMultiByte "WideCharToMultiByte" int, int, var, int, int, int, var, int
+
+#deffunc checkText int code
+	// 入力コード
+	character_size = 32
+	sdim character, character_size
+	low = 0
+	high = 0
+	mref _stat, 64
+	
+
+	if(code < 0x100) {
+		low = code
+	} else {
+		low = code >> 8
+		high = code & 0xff
+	}
+
+	// 制御文字などで飛ばす
+	if(code < 0x100) {
+		if(low <= 0x20) {
+			_stat = 1
+			return strf("0x%04x\t%s\t0x%08x\t%s\t%d\t%d\t%d", code, "", code, "", 0, 0, 0)
+		}
+	}
+
+	// shift_jisの範囲外を飛ばす
+	issjis = 0
+	if(code >= 0x100) {
+		if( ((0x81 <= low) && (low <= 0x9F)) || ((0xE0 <= low) && (low <= 0xFC)) ) {
+			issjis++
+		}
+		if( ((0x40 <= high) && (high <= 0x7E)) || ((0x80 <= high) && (high <= 0xFC)) ) {
+			issjis++
+		}
+		if(issjis != 2) {
+			_stat = 0
+			return ""
+		}
+	}
+	
+	lpoke character, 0, (high << 8) | low
+	
+	defaultchar = "?"
+	
+	utf_16_size = 32
+	sdim utf_16, utf_16_size
+	MultiByteToWideChar CP_ACP, MB_PRECOMPOSED, character, character_size, varptr(utf_16), utf_16_size
+	
+	cp932_size = 32
+	sdim cp932, cp932_size
+	
+	isUsedDefaultChar = 0
+	WideCharToMultiByte CP_ACP, 0, utf_16, utf_16_size, varptr(cp932), cp932_size, defaultchar, varptr(isUsedDefaultChar)
+
+	isSurrogatePair = 0
+	codepoint = 0
+	char1 = lpeek(utf_16, 0)
+	char2 = lpeek(utf_16, 2)
+	if(char2 == 0) {
+		codepoint = char1
+	} else {
+		isSurrogatePair = 1
+		codepoint = ((((char1 - 0xD800) << 10) | (char2 - 0xDC00)) + 0x10000)
+	}
+
+	// 変換ミスの場合
+	if(isUsedDefaultChar) {
+		cp932 = defaultchar
+	}
+	
+	numError = 0
+	if(defaultchar == cp932) {
+		numError = 1
+	}
+
+	// 元々の文字コードが変換ミスと同じ場合
+	if(peek(defaultchar, 0) == code) {
+		isUsedDefaultChar = 0
+		numError = 0
+	}
+
+	// 変換ミス判定
+	// sjisで「・」0x8145、 utf-8で「・」0x30fb
+	// 変換ミスする場合も、「・」0x30fb になる。
+	if((code != 0x8145) && (codepoint == 0x30fb)) {
+		numError = 2
+	}
+
+	_stat = 1
+	output = strf("0x%04x\t%s\t0x%08x\t%s\t%d\t%d\t%d", code, character, codepoint, cp932, isUsedDefaultChar, numError, isSurrogatePair)
+
+	return output
+
+#global
+
+
+sdim output, 10 * 1024 * 1024
+code = 0
+
+mes "create..."
+
+repeat 0x10000, 1
+	checkText cnt
+	if(stat) {
+		output += refstr + "\n"
+	}
+	if((cnt \ 1000) == 0) {
+		await 1
+		mes "" + ((double(cnt) / 0x10000) * 100.0) + "%"
+	}
+loop
+
+mes "save."
+
+bsave "cp932.tsv", output, strlen(output)
+
+mes "done."
