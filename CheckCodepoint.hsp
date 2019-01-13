@@ -1,0 +1,70 @@
+/**
+ * 調査用
+ * 
+ * AUTHOR:
+ *  natade (http://twitter.com/natadea)
+ * 
+ * LICENSE:
+ *  The zlib/libpng License https://opensource.org/licenses/Zlib
+ */
+
+#module
+
+#define CP_ACP 0
+#define CP_UTF8 65001
+#define MB_PRECOMPOSED 1
+
+#uselib "Kernel32.dll"
+
+// https://msdn.microsoft.com/ja-jp/library/cc448053.aspx
+#func MultiByteToWideChar "MultiByteToWideChar" int, int, var, int, int, int
+
+// https://msdn.microsoft.com/ja-jp/library/cc448089.aspx
+#func WideCharToMultiByte "WideCharToMultiByte" int, int, var, int, int, int, var, int
+
+#deffunc MultiByteToWideChar int codepoint
+
+	utf_16_size = 32
+	sdim utf_16, utf_16_size
+	
+	if(0x10000 <= codepoint) {
+		wpoke utf_16, 0, (codepoint & 0x3FF) + 0xDC00
+		wpoke utf_16, 2, (( codepoint - 0x10000 ) >> 10) + 0xD800
+	}
+	else {
+		wpoke utf_16, 0, codepoint
+	}
+
+	defaultchar = "?"
+	
+	cp932_size = 32
+	sdim cp932, cp932_size
+	
+	isUsedDefaultChar = 0
+	WideCharToMultiByte CP_ACP, 0, utf_16, utf_16_size, varptr(cp932), cp932_size, defaultchar, varptr(isUsedDefaultChar)
+
+	output = strf("0x%04x\t0x%04x\t%s", codepoint, wpeek(cp932, 0), cp932)
+
+	return output
+
+#global
+
+// Unicode 0xff5e Fullwidth Tilde 全角チルダ
+MultiByteToWideChar 0xFF5E
+mes refstr
+
+// Unicode 0x301c Wave Dash 波ダッシュ 
+MultiByteToWideChar 0x301C
+mes refstr
+
+// Unicode 0x00a5 Yen Sign 半角円マーク
+MultiByteToWideChar 0x00a5
+mes refstr
+
+// Unicode 0xffe5 Fullwidth Yen Sign 全角円マーク
+MultiByteToWideChar 0xffe5
+mes refstr
+
+// Unicode 0x005c Reverse Solidus 逆斜線
+MultiByteToWideChar 0x005c
+mes refstr
